@@ -51,6 +51,7 @@
 
 */
 
+#include <EEPROM.h>
 #include "argb.h"
 
 // buffers are ordered for fastest transfer by the ISR, see the ISR for detail
@@ -103,8 +104,11 @@ byte * outbuf = framebuffer_1;
 #define ADC_ADIE   B00001000  // interrupt enable
 #define ADC_ADPS   B00000111  // prescale, 111 = 128
 
+
 void RGBDisplay::init()
 {
+ EEPROM.get(0,ARGB_fine_adj);
+
  // data output
  DDR_Data  |= BIT_Data;
  PORT_Data &= ~BIT_Data;
@@ -137,10 +141,8 @@ void RGBDisplay::init()
  // 100Hz: 19999
  // 125Hz: 15999
  //
- // This makes my 2 boards more accurate
-#define CLOCKADJ    1
 
-#define USECOUNTER (16000000L / (ARGB_FRAMERATE * 8) - 1 + CLOCKADJ)
+int USECOUNTER = (16000000L / (ARGB_FRAMERATE * 8) - 1);
 
  // clear control registers and ensure timer stopped
  TCCR1A  = 0;
@@ -162,6 +164,12 @@ void RGBDisplay::init()
  
  // enable global interrupt
  sei();                 
+}
+
+void RGBDisplay::WriteFineAdjust()
+{
+ // write to flash if changed
+ EEPROM.update(0,ARGB_fine_adj);
 }
 
 //
@@ -213,31 +221,78 @@ void RGBDisplay::Fade(byte alpha)
  byte * pb = framebuffer;
  byte cnt  = ARGB_MAX_X * ARGB_MAX_Y / 4; // unrolled
 
+ // unsigned int div;
+ // byte & b = *(((byte*)&div)+1);
+
  while (cnt--)
   {
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
+   //   div = ((unsigned int)alpha * (*pb)); *(pb++) = b;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
 
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
 
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+   *pb = ((unsigned int)alpha * (*pb)) / 256;  pb++;
+}
+}
 
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
-   *pb = ((unsigned int)alpha * (*pb)) >> 8;  pb++;
+void RGBDisplay::CopyAltToMainFade(byte alpha)
+{
+ byte * pto   = framebuffer_1;
+ byte * pfrom = framebuffer_2;
+
+ byte cnt = ARGB_MAX_X;
+
+ while (cnt--)
+  {
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
+   *(pto++) = ((unsigned int)alpha * *(pfrom++)) / 256;
   }
 }
 
 void RGBDisplay::Fill(ARGB color)
 {
  byte b   = color;
- byte r   = color >> 8;
- byte g   = color >> 16;
+ byte g   = color / 256;
+ byte r   = color / 65536;
 
  byte * p = framebuffer;
 
@@ -281,11 +336,11 @@ void RGBDisplay::SetPixel(POINT x,POINT y,ARGB color)
  if (a1)
   {   
    // alpha blending
-   *pb = ((unsigned int)a1 * (*pb) + (unsigned int)a * c_b) >> 8;
+   *pb = ((unsigned int)a1 * (*pb) + (unsigned int)a * c_b) / 256;
    pb--;
-   *pb = ((unsigned int)a1 * (*pb) + (unsigned int)a * c_g) >> 8;
+   *pb = ((unsigned int)a1 * (*pb) + (unsigned int)a * c_g) / 256;
    pb--;
-   *pb = ((unsigned int)a1 * (*pb) + (unsigned int)a * c_r) >> 8;
+   *pb = ((unsigned int)a1 * (*pb) + (unsigned int)a * c_r) / 256;
   }
  else
   {
@@ -442,16 +497,16 @@ void RGBDisplay::DrawLine(POINT x0,POINT y0,POINT x1,POINT y1,ARGB color)
 // 
 // Small numbers, stored as vertical strips, lowest bit is top row
 //
-// 0   1   2   3   4   5   6   7   8   9   :   H    M
-// ***.*...***.***.*.*.***.***.***.***.***.....*.*.*.*
-// *.*.*.....*...*.*.*.*...*.....*.*.*.*.*..*..*.*.***
-// *.*.*...***.***.***.***.***...*.***.***.....***.***
-// *.*.*...*.....*...*...*.*.*...*.*.*...*..*..*.*.*.*
-//.***.*...***.***...*.***.***...*.***.***.....*.*.*.*
+// 0   1   2   3   4   5   6   7   8   9   :   H   M   F
+// ***.*...***.***.*.*.***.***.***.***.***.... *.* *.* ***
+// *.*.*.....*...*.*.*.*...*.....*.*.*.*.*..*. *.* *** *
+// *.*.*...***.***.***.***.***...*.***.***.... *** *** **
+// *.*.*...*.....*...*...*.*.*...*.*.*...*..*. *.* *.* *
+//.***.*...***.***...*.***.***...*.***.***.... *.* *.* *
 
 const byte numberFont[][3] PROGMEM =
  {
-  {0x1F,0x11,0x1F},
+  {0x1F,0x11,0x1F},  // 0
   {0x00,0x00,0x1F},
   {0x1D,0x15,0x17},
   {0x15,0x15,0x1F},
@@ -460,10 +515,11 @@ const byte numberFont[][3] PROGMEM =
   {0x1F,0x15,0x1D},
   {0x01,0x01,0x1F},
   {0x1F,0x15,0x1F},
-  {0x17,0x15,0x1F},
-  {0x0A,0x00,0x00},
-  {0x1F,0x04,0x1F},
-  {0x1F,0x06,0x1F}
+  {0x17,0x15,0x1F},  // 9
+  {0x0A,0x00,0x00},  // colon
+  {0x1F,0x04,0x1F},  // H
+  {0x1F,0x06,0x1F},  // M
+  {0x1F,0x05,0x01}  //  F
  };
 
 void RGBDisplay::DrawDigit(byte digit,
@@ -556,19 +612,19 @@ ARGB BlendARGB(ARGB c1,ARGB c2,byte ratio,byte fade)
 
  if (fade != 255)
   {
-   ratio1 = ((unsigned int)fade * ratio1) >> 8;
-   ratio2 = ((unsigned int)fade * ratio2) >> 8;
+   ratio1 = ((unsigned int)fade * ratio1) / 256;
+   ratio2 = ((unsigned int)fade * ratio2) / 256;
   }
 
  byte * cp1 = (byte*)(&c1);
  byte * cp2 = (byte*)(&c2);
 
- byte b = ((unsigned int)ratio2 * *(cp1++) + (unsigned int)ratio1 * *(cp2++)) >> 8;
- byte g = ((unsigned int)ratio2 * *(cp1++) + (unsigned int)ratio1 * *(cp2++)) >> 8;
- byte r = ((unsigned int)ratio2 * *(cp1++) + (unsigned int)ratio1 * *(cp2++)) >> 8;
+ byte b = ((unsigned int)ratio2 * *(cp1++) + (unsigned int)ratio1 * *(cp2++)) / 256;
+ byte g = ((unsigned int)ratio2 * *(cp1++) + (unsigned int)ratio1 * *(cp2++)) / 256;
+ byte r = ((unsigned int)ratio2 * *(cp1++) + (unsigned int)ratio1 * *(cp2++)) / 256;
 
  // dont fade the alpha
- byte a = ((unsigned int)(~ratio) * *(cp1++) + (unsigned int)(ratio) * *(cp2++)) >> 8;
+ byte a = ((unsigned int)(~ratio) * *(cp1++) + (unsigned int)(ratio) * *(cp2++)) / 256;
    
  return MakeARGB(a,r,g,b);
 }
@@ -592,6 +648,7 @@ ARGB BlendBaseColors(byte color1,byte color2,byte blend,byte fade)
                    fade);
 }
 
+
 ARGB GetRandomColor()
 {
  return pgm_read_dword(&BaseColors[random(12)]);
@@ -605,7 +662,8 @@ ARGB GetRandomColor()
 volatile byte          ARGB_user_frame = 0;       // flags one display frame
 volatile unsigned int  ARGB_clock_ms   = 0;       // counts ms within a second
 volatile unsigned long ARGB_clock_tod  = 0;       // seconds within a day
-volatile byte         ARGB_adcdata[ARGB_MAX_Y];   // analog samples
+volatile byte          ARGB_adcdata[ARGB_MAX_Y];  // analog samples
+volatile byte          ARGB_fine_adj;             // 0..99, 50 = none
 
 // enable for darker display (eg:night mode)
 byte                   ARGB_dark      = 0;
@@ -616,17 +674,22 @@ static void Send16Bit(unsigned int data)
  // - shifting a 16 bit value is slower than a test and branch
  // - note now this isn't used for pixel data its been looped again
 
- byte i = 16 / 4;
-
- while (i--)
-  {
    PORT_Data = (data&0x8000) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
    PORT_Data = (data&0x4000) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
    PORT_Data = (data&0x2000) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
    PORT_Data = (data&0x1000) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
-
-   data <<= 4;   
-  }
+   PORT_Data = (data&0x0800) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0400) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0200) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0100) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0080) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0040) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0020) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0010) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0008) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0004) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0002) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
+   PORT_Data = (data&0x0001) ? (PORT_Data | BIT_Data) : (PORT_Data & ~BIT_Data); PORT_Clk ^= BIT_Clk;
 }
 
 
@@ -667,7 +730,7 @@ void ARGB_SetTime(unsigned long new_tod)
 // This ISR is called when TIMER1 matches the count  
 ISR(TIMER1_COMPA_vect)          
 {
- static byte line       = 0;  // line we are about to send
+ static byte line = 0;  // line we are about to send
 
  // MY9221 commands
  // 0x0400 = hi speed (didn't help 12 bit mode)
@@ -676,7 +739,7 @@ ISR(TIMER1_COMPA_vect)
 
  const unsigned int CmdMode = 0x0010;
 
- int panels = ARGB_PANELS;
+ byte panels = ARGB_PANELS;
 
  // disable early, make display darker
  if (ARGB_dark)
@@ -728,30 +791,61 @@ ISR(TIMER1_COMPA_vect)
  PORT_Data ^= BIT_Data; PORT_Data ^= BIT_Data; PORT_Data ^= BIT_Data; PORT_Data ^= BIT_Data;
 
  // end of frame & timekeeping updates
-
  if (++line >= ARGB_MAX_Y)
   {
    line            = 0;                   // just sent out bottom line
    ARGB_user_frame = 1;                   // 1/framerate has passed
    outbuf          = framebuffer_1;       // back to top of framebuffer
 
-   ARGB_clock_ms += 1000/ARGB_FRAMERATE;  // one frame has passed, 10ms or 8ms
+   ARGB_clock_ms += (1000/ARGB_FRAMERATE); // 8ms at 125Hz
 
+   static byte irq_frames     = ARGB_FRAMERATE;   
+   static byte count_fine_adj = 1;
+
+   // one second according to the crystal
+   if (--irq_frames == 0)
+    {
+     irq_frames = ARGB_FRAMERATE;
+
+     // ARGB_fine_adj:
+     // 0  :lose 1ms every 2 second      (-42.8s/day)
+     // 49 :lose 1ms every 100 seconds   (-0.86s/day)
+     // 50 :no offset
+     // 51 :add 1ms every 98 seconds   (+0.88s/day)
+     // 99 :add 1ms every 2 seconds     (+42.8s/day)
+     if (ARGB_fine_adj > 50)
+      {
+       // speed up - add a ms for every x seconds
+       if (!(--count_fine_adj))
+        {
+         count_fine_adj = (100 - ARGB_fine_adj)*2;
+         ARGB_clock_ms++;
+        }
+      }
+     else if (ARGB_fine_adj < 50)
+      {
+       if (!(--count_fine_adj))
+        {
+         count_fine_adj = (ARGB_fine_adj + 1)*2;
+         ARGB_clock_ms--;
+        }
+      }
+    } // one second according to crystal
+   
+   // after adjustment, check for seconds
    if (ARGB_clock_ms >= 1000)
     {
-     // one second passed
-
-     ARGB_clock_ms = 0;              // either 8ms or 10ms are integer factors of 1000
+     ARGB_clock_ms -= 1000;
      ARGB_clock_tod++;
      if (ARGB_clock_tod >= 86400)    // roll over on day
       ARGB_clock_tod = 0;
 
-     PORT_LED  |= BIT_LED;      // turn on board LED on the second
-    }
+     PORT_LED  |= BIT_LED;               // turn on board LED on the second
+    } // adjusted time measures a second passed
    else
-    if (ARGB_clock_ms >= 20)
+    if (ARGB_clock_ms >= 25)
      PORT_LED      &= ~BIT_LED; // turn off board LED after 50ms
-  }
+  } // one frame just completed
 
  // give new row data time to settle before renabling display
  // anything less than this creates ghosts

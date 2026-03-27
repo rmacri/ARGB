@@ -1,0 +1,113 @@
+Hardware
+
+I'm using a MakerDuino from Maker Studio which is a good quality
+Arduino Uno clone. These have a 16MHz CPU, 2K or RAM and 32K of rewritable ROM.
+
+The display consists of 3 8x8 RGB "rainbow block" matrix driver boards.
+These chain together. Pixel data is sent serially with 2 output pins for
+data and clock. A further 3 pins control row select and a final pin
+enables display blanking.
+
+3 panels is the practical limit for power, CPU time and memory reasons.
+The display works by clocking in a row's worth of RGB data then enabling
+the display of that row, then blanking it, selecting the next row and
+clocking in the data for it,  etc.
+
+Hence at any instant only one row of pixels is on. Yet if these
+were driven at full brightnews, say 30mA per red/green/blue sub pixel,
+it would draw 0.03 * 3 * 24 (8x3 panels) = > 2 amps! Hence
+my ARGB library limits the brightness. The display can still be very bright.
+
+Display Driver
+
+I wrote optimised code to clock out the data as quick as possible without
+"ghosting" which occurs if you switch rows too quickly. An interrupt routine
+sends a row every millisecond, so the entire display refreshes every 8ms which
+results in a flicker free 125FPS.
+
+The delays needed in the interrupt routine mean significant time is spent
+clocking out the data which reduces CPU available to the main routine
+where the animations are produced.
+
+Animation Buffer Memory
+
+My ARGB driver uses 2 memory buffers for the display. The animation
+effects composit and blend themselves into one buffer. This is then
+copied and blended with text / bitmap overlays into the second buffer
+which is the one that the interrupt continuously sends to the panels.
+
+This results in flicker free animations and the ability to fade the
+animation effects while the text scrolls smoothly over it, etc.
+
+With 3 panels, 24x8x3 bytes are needed for each buffer, 576 bytes.
+The two buffers hence use over half the available RAM.
+
+This demo is actually triple buffered as a third monochrome 24 byte buffer
+enables a connected computer to send arbitrary graphics. I wanted this
+so Korean text and other unicode symbols could be scrolled over the animations.
+
+ASCII text can also be sent directly as ARGB has the standard ASCII font in it.
+
+Serial Interface
+
+The arduino program can accept commands over the USB virtual serial port.
+I found fast baud (115k) rates resulted in lost characters as the delays
+in the interrupt routine limit servicing the port fast enough.
+For this application 9600 baud is fast enough and works well.
+
+Commands generally consist of a start letter, text/params and newline and/or
+carriage return <CR> character, ASCII 13.
+
+Command sumamry:
+
+a<CR>        : Switch to animation mode
+l<CR>        : Lock the current effect instead of randomly changing
+n<CR>        : Next effect (works even if locked)
+
+c<CR>        : Switch to clock mode (default on power on)
+h<CR>        : toggle 24 hour time display
+HH:MM<CR>    : Sets the clock, HH:MM in 24 hour time, eg: 07:30. No prefix.
+
+mText<CR>    : Scrolls the text from right to left.
+               Switches to animation mode if not already.
+
+|HH<CR>      : Sends a vertical "bitslice" of monochrome pixels. HH is a hex
+               byte from 00 to FF. The bits are interpreted as a vertical
+               slice of pixels, LSB is the top pixel. They are placeed
+               in the right most column. When used repeatedly previous
+               pixels are shifted left.
+
+               The send rate of this command determines the scroll speed.
+               
+               The animations continue, dimmed in the background. The dimming
+               is applied gradually.
+
+$<CR>          Ends bitslice mode. The dimming is gradually removed.
+
+#<CR>          Starts RGB slice mode. If in animation or clock mode, the
+               display is blanked. Following this, exactly 24 bytes are
+               expected representing the red, green and blue intensities
+               for the pixels from the top right to the bottom right.
+               Raw bytes are expected not hex.
+
+               Repeating this command scrolls the previous display to the left.
+
+               Using this arbitrary full colour graphics can be sent to the
+               display. However note the display has a very non linear intensity
+               response.
+
+               Use the "a" or "c" command to exit this mode.
+
+Once set, clock time is kept regardless of the mode but you want
+an Arduino board with a crystal and may have to tune the timer
+timing in ARGB.CPP.
+
+Whilst RAM is very tight, there is pletny of program space free for enhancements
+(eg: parameterising settings, finer clock calibration) if there
+is any interest.
+
+Fine adjustments
+Desk clock: d03
+BR clock  : d11
+
+

@@ -62,7 +62,7 @@
 // off screen buffer bits if you need more.
 ///
 
-#define ARGB_PANELS            1
+#define ARGB_PANELS            2
 
 // Frame rate: for integral counter, either 100Hz or 125Hz.
 // 100Hz gives more time for processing  (1.25ms per line)
@@ -80,6 +80,8 @@ typedef uint32_t      ARGB;
 extern volatile byte          ARGB_user_frame;           // ISR sets every frame, user clears
 extern volatile unsigned int  ARGB_clock_ms;             // counts ms
 extern volatile byte          ARGB_adcdata[ARGB_MAX_Y];  // analog samples
+extern volatile byte          ARGB_fine_adj;
+
 extern byte                   ARGB_dark;                 // set for dimmer display
 
 // time of day updated by interrupt. Clock takes care in reading this
@@ -138,7 +140,10 @@ class RGBDisplay
  void FillCircle(POINT poX, POINT poY, byte r, ARGB color);
  void DrawLine(POINT x0,POINT y0,POINT x1,POINT y1,ARGB color);
  void Fade(byte alpha);
+ void CopyAltToMainFade(byte alpha);
  void ScrollLeft(byte steps);
+
+ void WriteFineAdjust();
 };
 
 inline ARGB MakeARGB(byte a,byte r,byte g,byte b)

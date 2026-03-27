@@ -1,0 +1,44 @@
+#ifndef BUTTON_H
+#define BUTTON_H
+
+//
+// Button debouncer in data memory bytes
+// Riccardo Macri, December 2014
+// provides debouncing, up, down and repeat event generation
+//
+
+
+#define DEBOUNCE_STATEMASK   0x80
+#define DEBOUNCE_STATESHIFT     7
+
+// timers:
+#define DEBOUNCE_TICKS          5  // at 10ms thats 50ms
+#define DEBOUNCE_REPEATDELAY  100  // repeat pre-delay 1 second 
+#define DEBOUNCE_REPEATINT     12  // repeat 120ms
+
+// return events for Update()
+enum eUpdateResults
+{
+ DEBOUNCE_NOCHANGE    = -1,   // no change since last poll
+ DEBOUNCE_UP          = 0,    // button has gone up (not in norepeat mode)
+ DEBOUNCE_DOWN        = 1,    // button has gone down (and debounced)
+ DEBOUNCE_REPEAT      = 2,    // button down repeat
+ DEBOUNCE_UP_NOREPEAT = 3     // button release in norepeat mode
+};
+
+class Button
+{
+ unsigned char statecount;  // button state and debounce timer
+ unsigned char pin;         // digital pin we configure/read
+
+ public:
+
+ void Setup(unsigned char use_pin);
+ char Update();             // call every 10ms, adjust above if change
+
+ // call after a down event to prevent further repeat messages
+ // also causds UP messages to become UP_NOREPEAT so caller can ignore them
+ void StopRepeat()    {statecount &= DEBOUNCE_STATEMASK;}
+};
+
+#endif
